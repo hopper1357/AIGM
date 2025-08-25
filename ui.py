@@ -17,6 +17,14 @@ class TabView:
         self.equipped_slot_rects = {} # Stores {slot_name: pygame.Rect} for drop detection
         self.carried_rect = None # Stores the rect for the carried items area
 
+        # New UI elements for Menu tab
+        self.fullscreen_toggle_rect = None
+        self.volume_slider_rect = None
+        self.volume_handle_rect = None
+        self.volume = 0.5  # Default volume
+        pygame.mixer.music.set_volume(self.volume)
+        self.dragging_volume = False
+
     def update_rect(self, rect):
         self.rect = rect
         self.tab_rects = []
@@ -26,32 +34,45 @@ class TabView:
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.tabs[self.active_tab] == "Inventory" and self.character:
+            # Tab switching
+            for i, tab_rect in enumerate(self.tab_rects):
+                if tab_rect.collidepoint(event.pos):
+                    self.active_tab = i
+                    return # Stop processing event if a tab was clicked
+
+            # Menu Tab Events
+            if self.tabs[self.active_tab] == "Menu":
+                if self.fullscreen_toggle_rect and self.fullscreen_toggle_rect.collidepoint(event.pos):
+                    return "toggle_fullscreen"
+                if self.volume_handle_rect and self.volume_handle_rect.collidepoint(event.pos):
+                    self.dragging_volume = True
+                elif self.volume_slider_rect and self.volume_slider_rect.collidepoint(event.pos):
+                    self.dragging_volume = True # Allow clicking on the bar
+                    self.volume_handle_rect.centerx = event.pos[0]
+                    self.update_volume_from_handle()
+
+            # Inventory Tab Events
+            elif self.tabs[self.active_tab] == "Inventory" and self.character:
                 for item_id, rect in self.item_rects.items():
                     if rect.collidepoint(event.pos):
                         self.dragging_item = True
                         self.dragged_item_id = item_id
                         self.dragged_item_offset_x = rect.x - event.pos[0]
                         self.dragged_item_offset_y = rect.y - event.pos[1]
-                        # Remove item from its current location temporarily for visual drag
                         if item_id in self.character.inventory["carried"]:
                             self.character.remove_from_carried(item_id)
-                        else: # Check equipped slots
+                        else:
                             for slot, eq_item_id in self.character.inventory["equipped"].items():
                                 if eq_item_id == item_id:
-                                    self.character.unequip_item(slot) # This will move it to carried
-                                    self.character.remove_from_carried(item_id) # Then remove from carried
+                                    self.character.unequip_item(slot)
+                                    self.character.remove_from_carried(item_id)
                                     break
                         break
-            for i, tab_rect in enumerate(self.tab_rects):
-                if tab_rect.collidepoint(event.pos):
-                    self.active_tab = i
-                    break
         
         if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.dragging_volume = False
             if self.dragging_item:
                 dropped = False
-                # Try to equip
                 item_obj = item.get_item_by_id(self.dragged_item_id)
                 if item_obj and item_obj.slot:
                     for slot_name, slot_rect in self.equipped_slot_rects.items():
@@ -60,20 +81,29 @@ class TabView:
                                 dropped = True
                                 break
                 
-                # If not equipped, try to add to carried
                 if not dropped and self.carried_rect and self.carried_rect.collidepoint(event.pos):
                     self.character.add_to_carried(self.dragged_item_id)
                     dropped = True
                 
-                # If not dropped anywhere valid, return to carried
                 if not dropped:
                     self.character.add_to_carried(self.dragged_item_id)
 
                 self.dragging_item = False
                 self.dragged_item_id = None
         
-        if event.type == pygame.MOUSEMOTION and self.dragging_item:
-            pass # Position is handled in draw for now, but will be used for actual drag
+        if event.type == pygame.MOUSEMOTION:
+            if self.dragging_volume and self.volume_slider_rect:
+                self.volume_handle_rect.centerx = event.pos[0]
+                self.update_volume_from_handle()
+            elif self.dragging_item:
+                pass # Dragged item position is handled in draw()
+
+    def update_volume_from_handle(self):
+        # Clamp the handle position
+        self.volume_handle_rect.centerx = max(self.volume_slider_rect.x, min(self.volume_handle_rect.centerx, self.volume_slider_rect.right))
+        # Update volume
+        self.volume = (self.volume_handle_rect.centerx - self.volume_slider_rect.x) / self.volume_slider_rect.width
+        pygame.mixer.music.set_volume(self.volume)
 
     def draw(self, surface):
         # Draw the tab buttons
@@ -97,6 +127,8 @@ class TabView:
             self.draw_character_info(surface, content_rect)
         elif self.tabs[self.active_tab] == "Inventory" and self.character:
             self.draw_inventory_info(surface, content_rect)
+        elif self.tabs[self.active_tab] == "Menu":
+            self.draw_menu_tab(surface, content_rect)
         else:
             active_tab_text = self.tabs[self.active_tab]
             text_surf = self.font.render(active_tab_text, True, (0, 0, 0))
@@ -111,6 +143,47 @@ class TabView:
                 item_name_text = self.font.render(item_obj.name, True, (0,0,0))
                 surface.blit(item_name_text, (mouse_x + self.dragged_item_offset_x, mouse_y + self.dragged_item_offset_y))
 
+    def draw_menu_tab(self, surface, rect):
+        # Fullscreen Toggle
+        y_offset = rect.y + 40
+        fullscreen_text = self.font.render("Fullscreen", True, (0, 0, 0))
+        surface.blit(fullscreen_text, (rect.x + 20, y_offset))
+
+        self.fullscreen_toggle_rect = pygame.Rect(rect.x + 200, y_offset - 10, 120, 40)
+        pygame.draw.rect(surface, (180, 180, 180), self.fullscreen_toggle_rect)
+        pygame.draw.rect(surface, (0, 0, 0), self.fullscreen_toggle_rect, 2)
+
+        is_fullscreen = surface.get_flags() & pygame.FULLSCREEN
+        toggle_text = "Disable" if is_fullscreen else "Enable"
+
+        toggle_surf = self.font.render(toggle_text, True, (0, 0, 0))
+        toggle_rect = toggle_surf.get_rect(center=self.fullscreen_toggle_rect.center)
+        surface.blit(toggle_surf, toggle_rect)
+
+        y_offset += 80
+
+        # Volume Slider
+        volume_text = self.font.render("Volume", True, (0, 0, 0))
+        surface.blit(volume_text, (rect.x + 20, y_offset))
+
+        slider_width = 200
+        slider_height = 10
+        self.volume_slider_rect = pygame.Rect(rect.x + 20, y_offset + 50, slider_width, slider_height)
+        pygame.draw.rect(surface, (150, 150, 150), self.volume_slider_rect)
+
+        handle_width = 20
+        handle_height = 30
+        handle_x = self.volume_slider_rect.x + (self.volume * self.volume_slider_rect.width)
+        # On the first draw, the handle rect might not be initialized
+        if self.volume_handle_rect is None:
+            self.volume_handle_rect = pygame.Rect(0, 0, handle_width, handle_height)
+        self.volume_handle_rect.center = (handle_x, self.volume_slider_rect.centery)
+
+        pygame.draw.rect(surface, (100, 100, 100), self.volume_handle_rect)
+
+        # Draw volume percentage
+        volume_percent_text = self.font.render(f"{int(self.volume * 100)}%", True, (0,0,0))
+        surface.blit(volume_percent_text, (self.volume_slider_rect.right + 20, y_offset + 35))
 
     def draw_character_info(self, surface, rect):
         y_offset = rect.y + 20

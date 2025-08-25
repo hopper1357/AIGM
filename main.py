@@ -121,8 +121,6 @@ def main():
             if event.type == pygame.MOUSEBUTTONUP:
                 dragging_divider1 = False
                 dragging_divider2 = False
-                # Pass mouse up event to tab_view for drag and drop handling
-                tab_view.handle_event(event) # Pass player_character here
 
             if event.type == pygame.MOUSEMOTION:
                 if dragging_divider1:
@@ -132,8 +130,18 @@ def main():
                     divider2_x = event.pos[0]
                     update_ui_layout(screen, tab_view, chat_window, party_window, divider1_x, divider2_x)
 
+            ui_action = tab_view.handle_event(event)
+            if ui_action == "toggle_fullscreen":
+                fullscreen = not fullscreen
+                if fullscreen:
+                    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                else:
+                    screen = pygame.display.set_mode((config.SCREEN_WIDTH, config.SCREEN_HEIGHT), pygame.RESIZABLE)
 
-            tab_view.handle_event(event) # Pass all events to tab_view
+                divider1_x = int(screen.get_width() * 0.25)
+                divider2_x = int(screen.get_width() * 0.75)
+                update_ui_layout(screen, tab_view, chat_window, party_window, divider1_x, divider2_x)
+
             user_input = chat_window.handle_event(event)
             if user_input:
                 response = dungeon_master.get_story_prompt(user_input)
