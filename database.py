@@ -1,8 +1,10 @@
 import sqlite3
 from character import Character # Import Character class
 
+DB_PATH = 'data/game.db'
+
 def initialize_database():
-    conn = sqlite3.connect('/home/dell/gemini_projects/AIGM/data/game.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # Create players table
@@ -53,7 +55,7 @@ def initialize_database():
     conn.close()
 
 def add_item(item_data):
-    conn = sqlite3.connect('/home/dell/gemini_projects/AIGM/data/game.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO items (
@@ -76,7 +78,7 @@ def add_item(item_data):
     return item_id
 
 def save_character(character):
-    conn = sqlite3.connect('/home/dell/gemini_projects/AIGM/data/game.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     character_json = character.to_json()
     cursor.execute("INSERT OR REPLACE INTO players (id, name, character_data, location) VALUES (?, ?, ?, ?)",
@@ -85,7 +87,7 @@ def save_character(character):
     conn.close()
 
 def load_character(player_id):
-    conn = sqlite3.connect('/home/dell/gemini_projects/AIGM/data/game.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT character_data FROM players WHERE id = ?", (player_id,))
     result = cursor.fetchone()
